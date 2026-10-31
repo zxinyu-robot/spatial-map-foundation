@@ -38,6 +38,10 @@ target_link_libraries(amap_tile_tool PRIVATE spatial_map)
 add_executable(export_splats tools/export_splats.cpp)
 target_link_libraries(export_splats PRIVATE spatial_map)
 
+# 端侧采集包工具（ScenePack v1：打包 / 校验）
+add_executable(scenepack_tool tools/scenepack_tool.cpp)
+target_link_libraries(scenepack_tool PRIVATE spatial_map)
+
 # 单元测试
 enable_testing()
 add_executable(map_state_test tests/map_state_test.cpp)
@@ -55,3 +59,7 @@ add_test(NAME splat_test COMMAND splat_test)
 add_executable(semantic_tile_test tests/semantic_tile_test.cpp)
 target_link_libraries(semantic_tile_test PRIVATE spatial_map)
 add_test(NAME semantic_tile_test COMMAND semantic_tile_test)
+
+add_executable(scenepack_test tests/scenepack_test.cpp)
+target_link_libraries(scenepack_test PRIVATE spatial_map)
+add_test(NAME scenepack_test COMMAND scenepack_test)

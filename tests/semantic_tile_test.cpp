@@ -59,19 +59,43 @@ void test_semantic_persistence() {
     a.insert(t);
 
     const std::string path = "/tmp/test_semantic.persist";
-    const std::int64_t saved = save_semantic_tiles(a, 18, path);
+    const std::int64_t saved = save_semantic_tiles(a, 18, path, 42);
     assert(saved == 1);
 
     SemanticTileStore<64> b;
     std::uint32_t zoom = 0;
-    const std::int64_t loaded = load_semantic_tiles(b, zoom, path);
+    std::uint32_t mv = 0;
+    const std::int64_t loaded = load_semantic_tiles(b, zoom, path, &mv);
     assert(loaded == 1);
     assert(zoom == 18);
+    assert(mv == 42);            // v2 带 map_version
     const SemanticTile* rt = b.find(TileKey{18, 3, 4});
     assert(rt != nullptr);
     assert(rt->confidence_of(SemanticCategory::Kitchen) == 90);
     assert(rt->confidence_of(SemanticCategory::GoalObject) == 80);
-    std::cout << "  [ok] semantic persistence\n";
+    std::cout << "  [ok] semantic persistence (v2 with map_version)\n";
+}
+
+// v1 旧文件必须仍可读，map_version 读为 0。
+void test_semantic_persistence_v1_compat() {
+    using namespace spatial_map;
+    const std::string path = "/tmp/test_semantic_v1.persist";
+    std::FILE* f = std::fopen(path.c_str(), "wb");
+    assert(f != nullptr);
+    std::fputs("semantic-tile 1 18\ntile 5 6 kitchen 88\n", f);
+    std::fclose(f);
+
+    SemanticTileStore<64> s;
+    std::uint32_t zoom = 0;
+    std::uint32_t mv = 99;
+    const std::int64_t loaded = load_semantic_tiles(s, zoom, path, &mv);
+    assert(loaded == 1);
+    assert(zoom == 18);
+    assert(mv == 0);             // v1 无语义版本
+    const SemanticTile* t = s.find(TileKey{18, 5, 6});
+    assert(t != nullptr);
+    assert(t->confidence_of(SemanticCategory::Kitchen) == 88);
+    std::cout << "  [ok] semantic persistence v1 backward compatible\n";
 }
 
 }  // namespace
@@ -82,6 +106,7 @@ int main() {
     test_semantic_name_roundtrip();
     test_semantic_store_idempotent_merge();
     test_semantic_persistence();
+    test_semantic_persistence_v1_compat();
     std::cout << "== all passed ==\n";
     return 0;
 }

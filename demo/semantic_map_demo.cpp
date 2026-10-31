@@ -58,14 +58,17 @@ int main() {
 
     std::cout << "\n== 语义瓦片序列化（对接真机 / 供上游消费）==\n";
     const std::string path = "/tmp/semantic_tiles.txt";
-    const std::int64_t saved = save_semantic_tiles(store, kZoom, path);
+    constexpr std::uint32_t kMapVersion = 7;  // 与 ScenePack manifest 同源
+    const std::int64_t saved = save_semantic_tiles(store, kZoom, path, kMapVersion);
     std::cout << "  保存 " << saved << " 个语义瓦片 → " << path << "\n";
 
     // 回读验证
     SemanticTileStore<64> loaded;
     std::uint32_t z = 0;
-    const std::int64_t n = load_semantic_tiles(loaded, z, path);
-    std::cout << "  回读 " << n << " 个语义瓦片 (zoom=" << z << ")\n";
+    std::uint32_t mv = 0;
+    const std::int64_t n = load_semantic_tiles(loaded, z, path, &mv);
+    std::cout << "  回读 " << n << " 个语义瓦片 (zoom=" << z
+              << ", map_version=" << mv << ")\n";
     const TileKey q = wgs84_to_amap_tile(30.2740, 120.1550, kZoom);
     const SemanticTile* qt = loaded.find(q);
     if (qt != nullptr) {

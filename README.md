@@ -37,12 +37,13 @@ WGS84 → GCJ-02 → 高德 / XYZ 瓦片 z/x/y
 - **地理锚定**（`src/map/geo_anchor.h`）：LIO 局部 ENU 位姿 + 地图原点经纬度/航向 → WGS84，ENU 平面近似。
 - **高德底图对齐**（`src/map/amap_tile.h`）：WGS84 ↔ GCJ-02 坐标转换（境外不偏移、往返误差 < 0.01m）+ 高德瓦片 URL 构造（子域名轮询）。
 - **空间状态运行时**（`src/runtime/`，自 fork-spatial-runtime 迁入）：状态生命周期 `Requested → Initialized → Active / Fixed → Marginalized → Archived`，因子批次校验、原子事务、固定延迟窗口。
-- **语义瓦片层**（`src/map/semantic_tile.h` + `semantic_persistence.h`）：在几何瓦片之上挂语义标签（厨房/门/走廊/开放目标），固定容量、无动态分配；语义 SLAM 输出经地理锚定投影到瓦片后挂标签，序列化为文本供上游消费与真机对接。
+- **语义瓦片层**（`src/map/semantic_tile.h` + `semantic_persistence.h`）：在几何瓦片之上挂语义标签（厨房/门/走廊/开放目标），固定容量、无动态分配；语义 SLAM 输出经地理锚定投影到瓦片后挂标签，序列化为文本（v2 格式带 `map_version`，兼容读取 v1）供上游消费与真机对接。
 - **高斯泼溅接口**（`src/render/gaussian_splat.h`）：3D Gaussian Splatting 数据模型 + 标准 3DGS PLY 导出（DC-only，可被 gsplat / SuperSplat 读取）。
 - **瓦片版本链持久化**（`src/map/tile_persistence.h`）：瓦片集合 + `graph_version` 序列化为可恢复文本，幂等重载——元宇宙持久空间地图的索引雏形。
 - **组合演示**（`demo/map_state_demo.cpp`）：Super-LIO 风格位姿 → 地理锚定 → 哈希瓦片 → 状态事务 → 版本化快照。
 - **拉瓦片工具**（`tools/`）：`amap_tile_tool` 输出 GCJ-02 坐标与瓦片 URL；`fetch_amap_tile.sh` 一键拉取底图验证对齐。
 - **splat 导出工具**（`tools/export_splats.cpp`）：瓦片 → 代理高斯泼溅 → 3DGS PLY。
+- **端侧采集包 ScenePack v1**（`src/io/scenepack.h`）：真机数据落盘与跨机交换容器。控制面 `manifest`（坐标系锚点 + `map_version` + `base_hash`）、索引面 `poses.bin`（40 字节定长关键帧）、`edges.bin`（相对位姿 + sqrtinfo 上三角）、语义瓦片、数据面 chunk 计数；FNV-1a 64 逐文件校验。定长记录、有界缓冲、返回码而非异常。
 
 ## 快速开始
 
@@ -134,6 +135,7 @@ clang++ -std=c++20 -I src src/runtime/*.cpp tests/map_state_test.cpp -o map_stat
 
 ```text
 src/map/        哈希瓦片编码 / 存储 / 高德底图对齐（header-only）
+src/io/         端侧采集包 ScenePack（manifest + 位姿图 + 校验）
 src/runtime/    空间状态运行时（fork-spatial 核心）
 demo/           组合演示
 tools/          高德瓦片工具（坐标转换 + 拉取）
@@ -146,7 +148,8 @@ docs/           架构说明与路线图
 ```text
 语义 SLAM 输出（局部位姿 + 类别 + 置信度）
   → 地理锚定 → 语义瓦片（SemanticTile：瓦片 + 标签集合）
-  → 序列化（semantic-tile 文本）→ 供上游（边侧世界模型 / 端侧策略）消费
+  → 序列化（semantic-tile 2 <zoom> <map_version>）→ 供上游（边侧世界模型 / 端侧策略）消费
+  → 可选：与位姿图一起打进 ScenePack，跨机交换
 ```
 
 运行语义 demo：
@@ -155,11 +158,33 @@ docs/           架构说明与路线图
 ./build/semantic_map_demo
 ```
 
+### ScenePack：真机数据打包与校验
+
+真机位姿直接写成文本（每行一个关键帧），工具转成定长二进制包：
+
+```text
+# poses.txt —— Super-LIO / 里程计直接吐即可
+<id> <stamp_ns> <x> <y> <z> <qx> <qy> <qz> <qw>
+```
+
+```bash
+# 打包（edges.txt / semantic_tiles.txt 可选）
+./build/scenepack_tool pack out/ 30.2741 120.1551 0.785398 7 poses.txt edges.txt semantic_tiles.txt
+
+# 校验：先比对 FNV-1a 校验和，再比对 map_version
+./build/scenepack_tool verify out/ 7
+# → verify out/: ok
+```
+
+校验失败返回非零并给出具体原因（`checksum_mismatch` / `version_mismatch` / `bad_magic` / `capacity_exceeded`），不静默通过。
+
 ## 规划中
 
 - 真实点云 / 关键帧 → splat 生成（当前为每瓦片代理 splat，接真实渲染引擎时替换）。
 - 瓦片版本链的增量同步与共享（当前为单机文本持久化，跨机共享待接 DDS / 对象存储）。
 - 语义标签与 edge-semantic-gateway 的 frontier 语义对齐（师生蒸馏链路的第一版）。
+- ScenePack 增量同步与内容寻址续传（当前为单机整包）。
+- 高斯分块序列化（量化列存 + 空间分块）；当前 `export_splats` 仍是每瓦片代理 splat，无真实高斯场可序列化。
 
 ## License
 
