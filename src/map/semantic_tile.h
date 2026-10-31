@@ -116,6 +116,11 @@ public:
     [[nodiscard]] bool full() const noexcept { return size_ == N; }
 
     // 登记语义瓦片（幂等：已存在则合并标签）。
+    //
+    // 返回 false 表示"未能完整登记"：表已满、或合并时标签超出
+    // kMaxTagsPerTile。**溢出不会被静默吞掉** —— 早期版本忽略合并时
+    // add_tag 的返回值，导致超容量标签无声丢失且调用方以为成功，
+    // 这在语义回写链路上会让标注"看起来应用了、实际没进地图"。
     bool insert(const SemanticTile& tile) noexcept {
         const std::uint64_t key = encode_tile_key(tile.key);
         const std::size_t idx = find_slot(key);
@@ -125,11 +130,15 @@ public:
             ++size_;
             return true;
         }
-        // 已存在：合并标签
+        // 已存在：合并标签，任一失败即报告
+        bool all_merged = true;
         for (std::uint8_t i = 0; i < tile.tag_count; ++i) {
-            slots_[idx].tile.add_tag(tile.tags[i].category, tile.tags[i].confidence);
+            if (!slots_[idx].tile.add_tag(tile.tags[i].category,
+                                          tile.tags[i].confidence)) {
+                all_merged = false;
+            }
         }
-        return true;
+        return all_merged;
     }
 
     // 查询瓦片的语义标签（返回指针，未找到返回 nullptr）。

@@ -46,6 +46,10 @@ target_link_libraries(scenepack_tool PRIVATE spatial_map)
 add_executable(semantic_tile_service tools/semantic_tile_service.cpp)
 target_link_libraries(semantic_tile_service PRIVATE spatial_map)
 
+# 语义标注回写合并（老师 VLM 标注 → 语义瓦片）
+add_executable(semantic_label_merge tools/semantic_label_merge.cpp)
+target_link_libraries(semantic_label_merge PRIVATE spatial_map)
+
 # 单元测试
 enable_testing()
 add_executable(map_state_test tests/map_state_test.cpp)
@@ -71,3 +75,7 @@ add_test(NAME scenepack_test COMMAND scenepack_test)
 add_executable(semantic_service_test tests/semantic_service_test.cpp)
 target_link_libraries(semantic_service_test PRIVATE spatial_map)
 add_test(NAME semantic_service_test COMMAND semantic_service_test)
+
+add_executable(semantic_label_overlay_test tests/semantic_label_overlay_test.cpp)
+target_link_libraries(semantic_label_overlay_test PRIVATE spatial_map)
+add_test(NAME semantic_label_overlay_test COMMAND semantic_label_overlay_test)

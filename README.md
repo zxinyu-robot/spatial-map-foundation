@@ -43,6 +43,7 @@ WGS84 → GCJ-02 → 高德 / XYZ 瓦片 z/x/y
 - **组合演示**（`demo/map_state_demo.cpp`）：Super-LIO 风格位姿 → 地理锚定 → 哈希瓦片 → 状态事务 → 版本化快照。
 - **拉瓦片工具**（`tools/`）：`amap_tile_tool` 输出 GCJ-02 坐标与瓦片 URL；`fetch_amap_tile.sh` 一键拉取底图验证对齐。
 - **splat 导出工具**（`tools/export_splats.cpp`）：瓦片 → 代理高斯泼溅 → 3DGS PLY。
+- **语义标注回写**（`src/runtime/semantic_label_overlay.h` + `tools/semantic_label_merge.cpp`）：把老师（VLM）标注的 `room_found` 落回语义瓦片。**base 文件只读不改**，合并结果另存（回滚 = 丢掉产物）；逐条校验 `map_version`，不匹配即丢弃；`map_version` 默认 +1（版本是 trace 样本的连接键，不递增会让「标注前的样本」与「标注后的地图」错误配对）；老师默认置信度 70，合并时取高者，不压掉 SLAM 实测。
 - **语义瓦片查询服务**（`src/runtime/semantic_service.h` + `tools/semantic_tile_service.cpp`）：TCP 行分隔 JSON 的只读查询服务，把语义地图暴露给边侧 / 端侧消费。支持 `info` / `tiles` / `query`（半径 + 类别 + 置信度过滤，按距离升序）。**查询点用 WGS84（机器人位姿空间），服务端内部换算到瓦片的 GCJ-02 空间** —— 混用会产生约 500m 系统性偏移。每次响应必带 `map_version` 供消费方校验。
 - **端侧采集包 ScenePack v1**（`src/io/scenepack.h`）：真机数据落盘与跨机交换容器。控制面 `manifest`（坐标系锚点 + `map_version` + `base_hash`）、索引面 `poses.bin`（40 字节定长关键帧）、`edges.bin`（相对位姿 + sqrtinfo 上三角）、语义瓦片、数据面 chunk 计数；FNV-1a 64 逐文件校验。定长记录、有界缓冲、返回码而非异常。
 
@@ -182,6 +183,31 @@ printf '{"cmd":"query","lat":30.2741,"lon":120.1551,"radius_m":300,"categories":
 
 **坐标系铁律**：瓦片索引空间是 GCJ-02（高德），机器人位姿是 WGS84。查询点必须给 WGS84，服务端负责换算。混用会让同一瓦片的距离从 38m 变成 513m，症状是「语义瓦片莫名查不到」而非报错 —— 测试已显式锁住这个坑。
 
+### 语义标注回写（VLM → 地图）
+
+老师（VLM）看懂了房间，把结论写回地图 —— 这是「老师能力传导到端侧学生」的最后一步。
+
+```bash
+# 1) 边侧产出 overlay（edge-semantic-gateway 的 edge/semantic_writer.py）
+#    每行：{"map_version":7,"lat":..,"lon":..,"category":"kitchen","confidence":85}
+
+# 2) 合并进语义瓦片（C++ 做，因为落瓦片要过 GCJ-02 换算，不能有两份实现）
+./build/semantic_label_merge --base semantic_tiles.txt \
+  --overlay labels.jsonl --out semantic_tiles_v8.txt --expected-version 7
+# base=2 个瓦片 (version=7, zoom=18)
+# overlay=3 行，应用 3 条
+# 输出 4 个瓦片 → semantic_tiles_v8.txt (version=8，已递增)
+```
+
+**四条约束**：
+
+| 约束 | 为什么 |
+| --- | --- |
+| base 只读，结果另存 | 回滚 = 丢掉产物，不靠撤销操作 |
+| 逐条校验 `map_version` | 旧图标注贴到新图 = 「厨房」标在走廊上 |
+| `map_version` 默认 +1 | 版本是 trace 连接键，不递增会让新旧样本错误配对 |
+| 老师默认置信度 70 | 低于 SLAM 实测，合并不压掉传感器结果 |
+
 ### ScenePack：真机数据打包与校验
 
 真机位姿直接写成文本（每行一个关键帧），工具转成定长二进制包：
@@ -206,7 +232,7 @@ printf '{"cmd":"query","lat":30.2741,"lon":120.1551,"radius_m":300,"categories":
 
 - 真实点云 / 关键帧 → splat 生成（当前为每瓦片代理 splat，接真实渲染引擎时替换）。
 - 瓦片版本链的增量同步与共享（当前为单机文本持久化，跨机共享待接 DDS / 对象存储）。
-- 语义标签与 edge-semantic-gateway 的 frontier 语义对齐（师生蒸馏链路的第一版）。
+- 语义标签与 edge-semantic-gateway 的 frontier 语义对齐（师生蒸馏链路的第一版）：**标注回写已通，尚缺 VLM 输出自动触发回写**。
 - ScenePack 增量同步与内容寻址续传（当前为单机整包）。
 - 高斯分块序列化（量化列存 + 空间分块）；当前 `export_splats` 仍是每瓦片代理 splat，无真实高斯场可序列化。
 
