@@ -10,6 +10,7 @@
 #include "map/hash_tile_store.h"
 #include "map/amap_tile.h"
 #include "map/geo_anchor.h"
+#include "map/tile_persistence.h"
 #include "runtime/spatial_runtime.h"
 
 namespace {
@@ -105,6 +106,34 @@ void test_geo_anchor() {
     std::cout << "  [ok] geo anchor\n";
 }
 
+// 追加：瓦片持久化测试
+void test_tile_persistence() {
+    using spatial_map::HashTileStore;
+    using spatial_map::TileKey;
+    using spatial_map::latlon_to_tile;
+    using spatial_map::save_tiles;
+    using spatial_map::load_tiles;
+
+    HashTileStore<64> a;
+    a.insert(latlon_to_tile(30.2740, 120.1550, 18));
+    a.insert(latlon_to_tile(30.2780, 120.1550, 18));
+
+    const std::string path = "/tmp/test_tiles.persist";
+    const std::int64_t saved = save_tiles(a, 42, path);
+    assert(saved == 2);
+
+    HashTileStore<64> b;
+    std::uint64_t version = 0;
+    const std::int64_t loaded = load_tiles(b, version, path);
+    assert(loaded == 2);
+    assert(version == 42);
+    assert(b.contains(latlon_to_tile(30.2740, 120.1550, 18)));
+    assert(b.contains(latlon_to_tile(30.2780, 120.1550, 18)));
+    assert(b.size() == 2);
+
+    std::cout << "  [ok] tile persistence\n";
+}
+
 }  // namespace
 
 int main() {
@@ -113,6 +142,8 @@ int main() {
     test_hash_store_idempotent();
     test_runtime_transaction();
     test_geo_anchor();
+    test_tile_persistence();
     std::cout << "== all passed ==\n";
     return 0;
 }
+
