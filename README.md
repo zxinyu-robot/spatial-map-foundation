@@ -43,6 +43,7 @@ WGS84 → GCJ-02 → 高德 / XYZ 瓦片 z/x/y
 - **组合演示**（`demo/map_state_demo.cpp`）：Super-LIO 风格位姿 → 地理锚定 → 哈希瓦片 → 状态事务 → 版本化快照。
 - **拉瓦片工具**（`tools/`）：`amap_tile_tool` 输出 GCJ-02 坐标与瓦片 URL；`fetch_amap_tile.sh` 一键拉取底图验证对齐。
 - **splat 导出工具**（`tools/export_splats.cpp`）：瓦片 → 代理高斯泼溅 → 3DGS PLY。
+- **语义地图可视化**（`tools/visualize_semantic_map.py` + `demo/semantic_floor_demo.cpp`）：把语义瓦片按类别着色叠加到高德底图（或离线网格画布），带图例与类别统计。**直接使用瓦片文件里已有的 GCJ-02 索引，不做任何坐标换算** —— 多一次转换就多一次 500m 偏移的机会。`semantic_floor_demo` 一次跑完「楼层布局 → VLM 回写 → 输出可视图」全链路。
 - **语义标注回写**（`src/runtime/semantic_label_overlay.h` + `tools/semantic_label_merge.cpp`）：把老师（VLM）标注的 `room_found` 落回语义瓦片。**base 文件只读不改**，合并结果另存（回滚 = 丢掉产物）；逐条校验 `map_version`，不匹配即丢弃；`map_version` 默认 +1（版本是 trace 样本的连接键，不递增会让「标注前的样本」与「标注后的地图」错误配对）；老师默认置信度 70，合并时取高者，不压掉 SLAM 实测。
 - **语义瓦片查询服务**（`src/runtime/semantic_service.h` + `tools/semantic_tile_service.cpp`）：TCP 行分隔 JSON 的只读查询服务，把语义地图暴露给边侧 / 端侧消费。支持 `info` / `tiles` / `query`（半径 + 类别 + 置信度过滤，按距离升序）。**查询点用 WGS84（机器人位姿空间），服务端内部换算到瓦片的 GCJ-02 空间** —— 混用会产生约 500m 系统性偏移。每次响应必带 `map_version` 供消费方校验。
 - **端侧采集包 ScenePack v1**（`src/io/scenepack.h`）：真机数据落盘与跨机交换容器。控制面 `manifest`（坐标系锚点 + `map_version` + `base_hash`）、索引面 `poses.bin`（40 字节定长关键帧）、`edges.bin`（相对位姿 + sqrtinfo 上三角）、语义瓦片、数据面 chunk 计数；FNV-1a 64 逐文件校验。定长记录、有界缓冲、返回码而非异常。
@@ -141,7 +142,7 @@ src/io/         端侧采集包 ScenePack（manifest + 位姿图 + 校验）
 src/runtime/    空间状态运行时（fork-spatial 核心）+ 语义瓦片查询服务
 demo/           组合演示
 tools/          高德瓦片工具（坐标转换 + 拉取）
-tests/          无框架单元测试
+tests/          无框架单元测试（C++ 直编 + Python 纯逻辑）
 docs/           架构说明与路线图
 ```
 
@@ -207,6 +208,28 @@ printf '{"cmd":"query","lat":30.2741,"lon":120.1551,"radius_m":300,"categories":
 | 逐条校验 `map_version` | 旧图标注贴到新图 = 「厨房」标在走廊上 |
 | `map_version` 默认 +1 | 版本是 trace 连接键，不递增会让新旧样本错误配对 |
 | 老师默认置信度 70 | 低于 SLAM 实测，合并不压掉传感器结果 |
+
+### 语义地图可视化
+
+一张图看清「标在哪、标成什么」——这是语义地图「供上游消费」的可见证据。
+
+![语义楼层地图](docs/assets/semantic_floor_map.png)
+
+```bash
+# 一步跑完：楼层布局 → 模拟 VLM 回写 → 输出两份瓦片文件
+./build/semantic_floor_demo /tmp
+
+# 出图（有底图）
+python3 tools/visualize_semantic_map.py /tmp/semantic_floor_v2.txt out.png
+# 或离线渲染（z≥19 时高德只有建筑底纹，网格更清晰）
+python3 tools/visualize_semantic_map.py /tmp/semantic_floor_v2.txt out.png --no-basemap
+```
+
+上图中右侧延伸出的两格（`corridor 76`、`bathroom 72`）就是 VLM 回写的结果，
+`map_version` 因此从 1 递增到 2。
+
+**瓦片粒度必须匹配语义对象尺度**：demo 用 z20（约 34m/瓦片）而非 z18（约 150m/瓦片）。
+用 z18 会把整栋楼标成一个「厨房」，物理上不成立。
 
 ### ScenePack：真机数据打包与校验
 

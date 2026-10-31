@@ -30,6 +30,10 @@ target_link_libraries(map_state_demo PRIVATE spatial_map)
 add_executable(semantic_map_demo demo/semantic_map_demo.cpp)
 target_link_libraries(semantic_map_demo PRIVATE spatial_map)
 
+# 语义地图消费 demo（楼层布局 + VLM 回写 + 可视化入口）
+add_executable(semantic_floor_demo demo/semantic_floor_demo.cpp)
+target_link_libraries(semantic_floor_demo PRIVATE spatial_map)
+
 # 高德瓦片工具
 add_executable(amap_tile_tool tools/amap_tile_tool.cpp)
 target_link_libraries(amap_tile_tool PRIVATE spatial_map)
