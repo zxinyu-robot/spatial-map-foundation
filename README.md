@@ -37,8 +37,10 @@ WGS84 → GCJ-02 → 高德 / XYZ 瓦片 z/x/y
 - **地理锚定**（`src/map/geo_anchor.h`）：LIO 局部 ENU 位姿 + 地图原点经纬度/航向 → WGS84，ENU 平面近似。
 - **高德底图对齐**（`src/map/amap_tile.h`）：WGS84 ↔ GCJ-02 坐标转换（境外不偏移、往返误差 < 0.01m）+ 高德瓦片 URL 构造（子域名轮询）。
 - **空间状态运行时**（`src/runtime/`，自 fork-spatial-runtime 迁入）：状态生命周期 `Requested → Initialized → Active / Fixed → Marginalized → Archived`，因子批次校验、原子事务、固定延迟窗口。
+- **高斯泼溅接口**（`src/render/gaussian_splat.h`）：3D Gaussian Splatting 数据模型 + 标准 3DGS PLY 导出（DC-only，可被 gsplat / SuperSplat 读取）。
 - **组合演示**（`demo/map_state_demo.cpp`）：Super-LIO 风格位姿 → 地理锚定 → 哈希瓦片 → 状态事务 → 版本化快照。
 - **拉瓦片工具**（`tools/`）：`amap_tile_tool` 输出 GCJ-02 坐标与瓦片 URL；`fetch_amap_tile.sh` 一键拉取底图验证对齐。
+- **splat 导出工具**（`tools/export_splats.cpp`）：瓦片 → 代理高斯泼溅 → 3DGS PLY。
 
 ## 快速开始
 
@@ -59,6 +61,13 @@ ctest --test-dir build --output-on-failure
 # gcj02=30.27167,120.1597
 # tile=z18/218569/107925
 # saved: amap_tile.png (PNG image data)
+```
+
+把已登记瓦片导出为高斯泼溅 PLY：
+
+```bash
+./build/export_splats 30.2740 120.1550 18 splats.ply
+# 导出 3 个 splat → splats.ply
 ```
 
 无 CMake 时可直接编译：
@@ -94,7 +103,7 @@ docs/           架构说明与路线图
 
 ## 规划中
 
-- 高斯泼溅渲染接口：瓦片内点云/关键帧作为 splat 输入，向外提供渲染数据。
+- 真实点云 / 关键帧 → splat 生成（当前为每瓦片代理 splat，接真实渲染引擎时替换）。
 - 元宇宙持久空间地图：瓦片版本链作为持久化与共享的索引。
 
 ## License

@@ -31,6 +31,10 @@ target_link_libraries(map_state_demo PRIVATE spatial_map)
 add_executable(amap_tile_tool tools/amap_tile_tool.cpp)
 target_link_libraries(amap_tile_tool PRIVATE spatial_map)
 
+# 高斯泼溅导出工具
+add_executable(export_splats tools/export_splats.cpp)
+target_link_libraries(export_splats PRIVATE spatial_map)
+
 # 单元测试
 enable_testing()
 add_executable(map_state_test tests/map_state_test.cpp)
@@ -40,3 +44,7 @@ add_test(NAME map_state_test COMMAND map_state_test)
 add_executable(amap_tile_test tests/amap_tile_test.cpp)
 target_link_libraries(amap_tile_test PRIVATE spatial_map)
 add_test(NAME amap_tile_test COMMAND amap_tile_test)
+
+add_executable(splat_test tests/splat_test.cpp)
+target_link_libraries(splat_test PRIVATE spatial_map)
+add_test(NAME splat_test COMMAND splat_test)
