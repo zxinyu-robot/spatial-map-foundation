@@ -76,9 +76,37 @@ ctest --test-dir build --output-on-failure
 python3 tools/visualize_tiles.py 30.2740 120.1550 18 docs/assets/map_3x3.png
 ```
 
+## Demo 展示
+
+### ① 高德底图 + splat 瓦片叠加
+
 ![3×3 高德底图 + splat 瓦片叠加](docs/assets/map_3x3.png)
 
-> 蓝框 = 中心瓦片；红框 + 红点 = 已登记 splat 瓦片（对应 Super-LIO 轨迹跨过的 3 个瓦片）。
+> 蓝框 = 中心瓦片；红框 + 红点 = 已登记 splat 瓦片（对应 Super-LIO 轨迹跨过的 3 个瓦片）。底图为杭州武林广场真实高德瓦片。
+
+### ② 终端全链路回放
+
+`./build/map_state_demo` 的实际输出：
+
+```text
+== Super-LIO 增量位姿 → 哈希瓦片 → 空间状态事务 ==
+  [+ok] 局部(0,0) → wgs(30.274,120.155) → z18 x218569 y107925  graph_version=1
+  [+ok] 局部(0,500) → wgs(30.2785,120.155) → z18 x218569 y107921  graph_version=2
+  [+ok] 局部(700,0) → wgs(30.274,120.162) → z18 x218574 y107925  graph_version=3
+  [dup] 局部(0,0) → z18 x218569 y107925 已存在，拒绝重复
+
+== 状态快照 ==
+  graph_version=3  active_states=3  backend_operations=9  tiles_registered=3  duplicates_rejected=1
+```
+
+### ③ 高斯泼溅 PLY（拖进 SuperSplat 旋转查看）
+
+`splats.ply`（3 个代理 splat）已导出到 [docs/assets/splats.ply](docs/assets/splats.ply)，可拖入 https://superspl.at/editor 交互查看。
+
+```text
+$ ./build/export_splats 30.2740 120.1550 18 splats.ply
+导出 3 个 splat → splats.ply
+```
 
 无 CMake 时可直接编译：
 

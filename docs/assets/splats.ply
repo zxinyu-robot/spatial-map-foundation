@@ -1,0 +1,24 @@
+ply
+format ascii 1.0
+element vertex 3
+property float x
+property float y
+property float z
+property float nx
+property float ny
+property float nz
+property float f_dc_0
+property float f_dc_1
+property float f_dc_2
+property float opacity
+property float scale_0
+property float scale_1
+property float scale_2
+property float rot_0
+property float rot_1
+property float rot_2
+property float rot_3
+end_header
+435.569667 -275.919309 0.000000 0 0 0 0.739000 0.738000 0.701000 0.800000 44.009903 44.009903 5.000000 0.000000 0.000000 0.000000 1.000000
+435.569667 252.186747 0.000000 0 0 0 0.549000 0.548000 0.763000 0.800000 44.007774 44.007774 5.000000 0.000000 0.000000 0.000000 1.000000
+1095.701520 -275.919309 0.000000 0 0 0 0.618000 0.613000 0.612000 0.800000 44.009903 44.009903 5.000000 0.000000 0.000000 0.000000 1.000000

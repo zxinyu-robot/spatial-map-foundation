@@ -1,0 +1,11 @@
+== Super-LIO 增量位姿 → 哈希瓦片 → 空间状态事务 ==
+  [+ok] 局部(0,0) → wgs(30.274,120.155) → z18 x218569 y107925  graph_version=1
+  [+ok] 局部(0,500) → wgs(30.2785,120.155) → z18 x218569 y107921  graph_version=2
+  [+ok] 局部(700,0) → wgs(30.274,120.162) → z18 x218574 y107925  graph_version=3
+  [dup] 局部(0,0) → z18 x218569 y107925 已存在，拒绝重复
+
+== 状态快照 ==
+  graph_version=3  active_states=3  backend_operations=9  tiles_registered=3  duplicates_rejected=1
+
+== 查询验证 ==
+  局部(200,300) → wgs(30.2767,120.157) → z18 x218571 y107923 → 未登记
