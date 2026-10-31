@@ -43,6 +43,7 @@ WGS84 → GCJ-02 → 高德 / XYZ 瓦片 z/x/y
 - **组合演示**（`demo/map_state_demo.cpp`）：Super-LIO 风格位姿 → 地理锚定 → 哈希瓦片 → 状态事务 → 版本化快照。
 - **拉瓦片工具**（`tools/`）：`amap_tile_tool` 输出 GCJ-02 坐标与瓦片 URL；`fetch_amap_tile.sh` 一键拉取底图验证对齐。
 - **splat 导出工具**（`tools/export_splats.cpp`）：瓦片 → 代理高斯泼溅 → 3DGS PLY。
+- **语义瓦片查询服务**（`src/runtime/semantic_service.h` + `tools/semantic_tile_service.cpp`）：TCP 行分隔 JSON 的只读查询服务，把语义地图暴露给边侧 / 端侧消费。支持 `info` / `tiles` / `query`（半径 + 类别 + 置信度过滤，按距离升序）。**查询点用 WGS84（机器人位姿空间），服务端内部换算到瓦片的 GCJ-02 空间** —— 混用会产生约 500m 系统性偏移。每次响应必带 `map_version` 供消费方校验。
 - **端侧采集包 ScenePack v1**（`src/io/scenepack.h`）：真机数据落盘与跨机交换容器。控制面 `manifest`（坐标系锚点 + `map_version` + `base_hash`）、索引面 `poses.bin`（40 字节定长关键帧）、`edges.bin`（相对位姿 + sqrtinfo 上三角）、语义瓦片、数据面 chunk 计数；FNV-1a 64 逐文件校验。定长记录、有界缓冲、返回码而非异常。
 
 ## 快速开始
@@ -136,7 +137,7 @@ clang++ -std=c++20 -I src src/runtime/*.cpp tests/map_state_test.cpp -o map_stat
 ```text
 src/map/        哈希瓦片编码 / 存储 / 高德底图对齐（header-only）
 src/io/         端侧采集包 ScenePack（manifest + 位姿图 + 校验）
-src/runtime/    空间状态运行时（fork-spatial 核心）
+src/runtime/    空间状态运行时（fork-spatial 核心）+ 语义瓦片查询服务
 demo/           组合演示
 tools/          高德瓦片工具（坐标转换 + 拉取）
 tests/          无框架单元测试
@@ -157,6 +158,29 @@ docs/           架构说明与路线图
 ```bash
 ./build/semantic_map_demo
 ```
+
+### 语义瓦片查询服务
+
+把语义地图暴露给边侧（Python）消费 —— 这是「老师 VLM 理解 → 语义瓦片 → 端侧策略」链路的通道。
+
+```bash
+./build/semantic_tile_service --file /tmp/semantic_tiles.txt --port 9881 \
+  --anchor-lat 30.2741 --anchor-lon 120.1551
+```
+
+```bash
+# info：版本 / 缩放级 / 瓦片数 / 锚点
+printf '{"cmd":"info"}\n' | nc 127.0.0.1 9881
+
+# 半径查询（lat/lon 为 WGS84；可加 categories / min_confidence）
+printf '{"cmd":"query","lat":30.2741,"lon":120.1551,"radius_m":300,"categories":["kitchen"]}\n' \
+  | nc 127.0.0.1 9881
+# → {"ok":true,"map_version":7,"count":1,"truncated":false,
+#    "tiles":[{"z":18,"x":218569,"y":107925,"dist_m":37.68,
+#              "tags":[{"cat":"kitchen","conf":90}]}]}
+```
+
+**坐标系铁律**：瓦片索引空间是 GCJ-02（高德），机器人位姿是 WGS84。查询点必须给 WGS84，服务端负责换算。混用会让同一瓦片的距离从 38m 变成 513m，症状是「语义瓦片莫名查不到」而非报错 —— 测试已显式锁住这个坑。
 
 ### ScenePack：真机数据打包与校验
 

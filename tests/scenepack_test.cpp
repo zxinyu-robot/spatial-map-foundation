@@ -6,6 +6,8 @@
 #include <cstring>
 #include <iostream>
 
+#include <sys/stat.h>
+
 #include "io/scenepack.h"
 
 namespace {
@@ -26,6 +28,9 @@ constexpr const char* kDir = "/tmp/scenepack_test_dir";
 using namespace spatial_map;
 
 void write_pack(std::uint32_t map_version) {
+    // 测试自建目录：不依赖外部预先 mkdir，否则单独运行时莫名失败。
+    ::mkdir(kDir, 0755);
+
     ScenePackManifest m;
     m.map_version = map_version;
     m.base_hash = 0xa1b2c3d4e5f60718ULL;
