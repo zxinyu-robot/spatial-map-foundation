@@ -1,4 +1,4 @@
-// 无框架单元测试：哈希瓦片编码往返 + 幂等登记 + 状态事务。
+// 无框架单元测试：哈希瓦片编码往返 + 幂等登记 + 状态事务 + 地理锚定。
 #include <cassert>
 #include <cmath>
 #include <iostream>
@@ -8,6 +8,8 @@
 
 #include "map/tile_math.h"
 #include "map/hash_tile_store.h"
+#include "map/amap_tile.h"
+#include "map/geo_anchor.h"
 #include "runtime/spatial_runtime.h"
 
 namespace {
@@ -16,7 +18,7 @@ void test_tile_roundtrip() {
     using spatial_map::latlon_to_tile;
     using spatial_map::tile_to_latlon;
 
-    // 已知参考值：zoom 0 时全世界是一个瓦片 (0,0,0)
+    // zoom 0 时全世界是一个瓦片 (0,0,0)
     auto k = latlon_to_tile(0.0, 0.0, 0);
     assert(k.z == 0 && k.x == 0 && k.y == 0);
 
@@ -77,6 +79,32 @@ void test_runtime_transaction() {
     std::cout << "  [ok] runtime transaction\n";
 }
 
+void test_geo_anchor() {
+    using spatial_map::GeoAnchor;
+    using spatial_map::LatLon;
+    using spatial_map::local_to_wgs84;
+
+    const GeoAnchor anchor{30.0, 120.0, 0.0};
+
+    // 原点 → 原点
+    const LatLon o = local_to_wgs84(anchor, 0.0, 0.0);
+    assert(std::abs(o.lat - 30.0) < 1e-9);
+    assert(std::abs(o.lon - 120.0) < 1e-9);
+
+    // 北向 500m → 纬度约 +500/111320 度
+    const LatLon n = local_to_wgs84(anchor, 0.0, 500.0);
+    assert(std::abs(n.lat - (30.0 + 500.0 / 111320.0)) < 1e-6);
+    assert(std::abs(n.lon - 120.0) < 1e-9);
+
+    // 东向 500m → 经度约 +500/(111320*cos30) 度
+    const LatLon e = local_to_wgs84(anchor, 500.0, 0.0);
+    const double meters_per_deg_lon = 111320.0 * std::cos(30.0 * M_PI / 180.0);
+    assert(std::abs(e.lon - (120.0 + 500.0 / meters_per_deg_lon)) < 1e-6);
+    assert(std::abs(e.lat - 30.0) < 1e-9);
+
+    std::cout << "  [ok] geo anchor\n";
+}
+
 }  // namespace
 
 int main() {
@@ -84,6 +112,7 @@ int main() {
     test_tile_roundtrip();
     test_hash_store_idempotent();
     test_runtime_transaction();
+    test_geo_anchor();
     std::cout << "== all passed ==\n";
     return 0;
 }

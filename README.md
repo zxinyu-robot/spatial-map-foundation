@@ -10,8 +10,10 @@
 ## 这条链路在解决什么
 
 ```text
-局部 SLAM 增量状态图
-      │ 经纬度 → Web Mercator 瓦片 z/x/y
+Super-LIO 增量位姿（局部 ENU x/y/z + 四元数）
+      │ 地理锚定：地图原点经纬度 + 航向 → WGS84
+      ▼
+WGS84 → GCJ-02 → 高德 / XYZ 瓦片 z/x/y
       ▼
 哈希瓦片登记（幂等，重复拒绝）        ← src/map
       │ 新瓦片 → SubmapPose 状态
@@ -21,7 +23,7 @@
       ▼
 版本化状态快照
       │ （规划中）
-      ├── 高德地图 API 数据（瓦片 ID 对齐）
+      ├── 高德地图 API 底图（瓦片 ID 对齐，已可拉取）
       ├── 高斯泼溅（Gaussian Splatting）渲染
       └── 元宇宙持久空间地图
 ```
@@ -32,9 +34,10 @@
 
 - **哈希瓦片编码**（`src/map/tile_math.h`）：经纬度 ↔ 高德 / XYZ / Slippy Map 瓦片 `z/x/y` 互转，Web Mercator 投影，瓦片编号与主流地图服务一致。
 - **哈希瓦片存储**（`src/map/hash_tile_store.h`）：固定容量开放寻址哈希表，无动态分配；瓦片幂等登记、重复拒绝、墓碑删除，查询 O(1) 均摊。
+- **地理锚定**（`src/map/geo_anchor.h`）：LIO 局部 ENU 位姿 + 地图原点经纬度/航向 → WGS84，ENU 平面近似。
 - **高德底图对齐**（`src/map/amap_tile.h`）：WGS84 ↔ GCJ-02 坐标转换（境外不偏移、往返误差 < 0.01m）+ 高德瓦片 URL 构造（子域名轮询）。
 - **空间状态运行时**（`src/runtime/`，自 fork-spatial-runtime 迁入）：状态生命周期 `Requested → Initialized → Active / Fixed → Marginalized → Archived`，因子批次校验、原子事务、固定延迟窗口。
-- **组合演示**（`demo/map_state_demo.cpp`）：SLAM 位姿 → 哈希瓦片 → 状态事务 → 版本化快照。
+- **组合演示**（`demo/map_state_demo.cpp`）：Super-LIO 风格位姿 → 地理锚定 → 哈希瓦片 → 状态事务 → 版本化快照。
 - **拉瓦片工具**（`tools/`）：`amap_tile_tool` 输出 GCJ-02 坐标与瓦片 URL；`fetch_amap_tile.sh` 一键拉取底图验证对齐。
 
 ## 快速开始
