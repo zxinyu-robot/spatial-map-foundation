@@ -27,8 +27,16 @@ target_link_libraries(spatial_map INTERFACE fork_spatial_runtime)
 add_executable(map_state_demo demo/map_state_demo.cpp)
 target_link_libraries(map_state_demo PRIVATE spatial_map)
 
+# 高德瓦片工具
+add_executable(amap_tile_tool tools/amap_tile_tool.cpp)
+target_link_libraries(amap_tile_tool PRIVATE spatial_map)
+
 # 单元测试
 enable_testing()
 add_executable(map_state_test tests/map_state_test.cpp)
 target_link_libraries(map_state_test PRIVATE spatial_map)
 add_test(NAME map_state_test COMMAND map_state_test)
+
+add_executable(amap_tile_test tests/amap_tile_test.cpp)
+target_link_libraries(amap_tile_test PRIVATE spatial_map)
+add_test(NAME amap_tile_test COMMAND amap_tile_test)

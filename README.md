@@ -32,8 +32,10 @@
 
 - **哈希瓦片编码**（`src/map/tile_math.h`）：经纬度 ↔ 高德 / XYZ / Slippy Map 瓦片 `z/x/y` 互转，Web Mercator 投影，瓦片编号与主流地图服务一致。
 - **哈希瓦片存储**（`src/map/hash_tile_store.h`）：固定容量开放寻址哈希表，无动态分配；瓦片幂等登记、重复拒绝、墓碑删除，查询 O(1) 均摊。
+- **高德底图对齐**（`src/map/amap_tile.h`）：WGS84 ↔ GCJ-02 坐标转换（境外不偏移、往返误差 < 0.01m）+ 高德瓦片 URL 构造（子域名轮询）。
 - **空间状态运行时**（`src/runtime/`，自 fork-spatial-runtime 迁入）：状态生命周期 `Requested → Initialized → Active / Fixed → Marginalized → Archived`，因子批次校验、原子事务、固定延迟窗口。
 - **组合演示**（`demo/map_state_demo.cpp`）：SLAM 位姿 → 哈希瓦片 → 状态事务 → 版本化快照。
+- **拉瓦片工具**（`tools/`）：`amap_tile_tool` 输出 GCJ-02 坐标与瓦片 URL；`fetch_amap_tile.sh` 一键拉取底图验证对齐。
 
 ## 快速开始
 
@@ -44,6 +46,16 @@ cmake -S . -B build
 cmake --build build
 ctest --test-dir build --output-on-failure
 ./build/map_state_demo
+```
+
+拉一张高德底图瓦片，验证位姿与底图对齐：
+
+```bash
+./tools/fetch_amap_tile.sh 30.2740 120.1550 18 amap_tile.png
+# wgs84=30.274,120.155
+# gcj02=30.27167,120.1597
+# tile=z18/218569/107925
+# saved: amap_tile.png (PNG image data)
 ```
 
 无 CMake 时可直接编译：
@@ -69,16 +81,16 @@ clang++ -std=c++20 -I src src/runtime/*.cpp tests/map_state_test.cpp -o map_stat
 ## 目录结构
 
 ```text
-src/map/        哈希瓦片编码与存储（header-only）
+src/map/        哈希瓦片编码 / 存储 / 高德底图对齐（header-only）
 src/runtime/    空间状态运行时（fork-spatial 核心）
 demo/           组合演示
+tools/          高德瓦片工具（坐标转换 + 拉取）
 tests/          无框架单元测试
 docs/           架构说明与路线图
 ```
 
 ## 规划中
 
-- 高德地图 API 数据对齐：瓦片 `z/x/y` 直接映射到高德瓦片 URL，拉取城市级底图。
 - 高斯泼溅渲染接口：瓦片内点云/关键帧作为 splat 输入，向外提供渲染数据。
 - 元宇宙持久空间地图：瓦片版本链作为持久化与共享的索引。
 
