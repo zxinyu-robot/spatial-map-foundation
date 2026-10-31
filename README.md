@@ -70,6 +70,16 @@ ctest --test-dir build --output-on-failure
 # 导出 3 个 splat → splats.ply
 ```
 
+拼接 3×3 高德底图，叠加已登记 splat 瓦片可视化：
+
+```bash
+python3 tools/visualize_tiles.py 30.2740 120.1550 18 docs/assets/map_3x3.png
+```
+
+![3×3 高德底图 + splat 瓦片叠加](docs/assets/map_3x3.png)
+
+> 蓝框 = 中心瓦片；红框 + 红点 = 已登记 splat 瓦片（对应 Super-LIO 轨迹跨过的 3 个瓦片）。
+
 无 CMake 时可直接编译：
 
 ```bash
