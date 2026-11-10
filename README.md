@@ -3,50 +3,39 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C.svg)](https://isocpp.org/)
 
-**哈希瓦片地图底座 + 空间状态运行时**。把局部 SLAM 的增量状态，通过哈希瓦片编码嵌入到城市级地图坐标，并以版本化状态事务管理地图状态。
+> 哈希瓦片地图底座 + 空间状态运行时：把局部 SLAM 增量状态嵌入城市级地图坐标，并以版本化状态事务管理地图状态。
+>
+> A hash-tiled map foundation and spatial-state runtime for versioned map transactions.
 
-> A hash-tiled map foundation and spatial-state runtime. Local SLAM incremental states are embedded into city-scale map coordinates via hash tile encoding, and managed as versioned state transactions.
+## 项目状态
 
-## 这条链路在解决什么
+| 项目 | 状态 |
+| --- | --- |
+| 维护状态 | Active |
+| 实现范围 | C++20；哈希瓦片、地理锚定、语义地图和状态事务 |
+| 主要验证 | 单元测试、地图状态 demo、底图对齐与可视化工具 |
+| 生产集成 | 上游 SLAM、规划和真机链路通过接口接入 |
+
+## 项目简介
+
+地图是导航的度量底座。项目将 Super-LIO 风格的局部 ENU 位姿经过地理锚定和坐标转换，登记到 WGS84 / GCJ-02 / XYZ 瓦片，再通过空间状态运行时形成可查询、可持久化的版本化快照。
 
 ```text
-Super-LIO 增量位姿（局部 ENU x/y/z + 四元数）
-      │ 地理锚定：地图原点经纬度 + 航向 → WGS84
-      ▼
-WGS84 → GCJ-02 → 高德 / XYZ 瓦片 z/x/y
-      ▼
-哈希瓦片登记（幂等，重复拒绝）        ← src/map
-      │ 新瓦片 → SubmapPose 状态
-      ▼
-空间状态事务（生命周期 + 原子提交）   ← src/runtime
-      │ optimize()
-      ▼
-版本化状态快照
-      │ （规划中）
-      ├── 高德地图 API 底图（瓦片 ID 对齐，已可拉取）
-      ├── 高斯泼溅（Gaussian Splatting）渲染
-      └── 元宇宙持久空间地图
+局部 ENU 位姿 → WGS84 → GCJ-02 / XYZ z/x/y
+             → 哈希瓦片登记 → SubmapPose 状态
+             → 空间状态事务 → 版本化状态快照
 ```
 
-核心思想：**地图是导航的度量底座**。三空间（度量 / 符号 / 世界）之下，先要有一个可哈希、可版本、可查询的空间坐标层。
+## 核心能力
 
-## 已实现
-
-- **哈希瓦片编码**（`src/map/tile_math.h`）：经纬度 ↔ 高德 / XYZ / Slippy Map 瓦片 `z/x/y` 互转，Web Mercator 投影，瓦片编号与主流地图服务一致。
-- **哈希瓦片存储**（`src/map/hash_tile_store.h`）：固定容量开放寻址哈希表，无动态分配；瓦片幂等登记、重复拒绝、墓碑删除，查询 O(1) 均摊。
-- **地理锚定**（`src/map/geo_anchor.h`）：LIO 局部 ENU 位姿 + 地图原点经纬度/航向 → WGS84，ENU 平面近似。
-- **高德底图对齐**（`src/map/amap_tile.h`）：WGS84 ↔ GCJ-02 坐标转换（境外不偏移、往返误差 < 0.01m）+ 高德瓦片 URL 构造（子域名轮询）。
-- **空间状态运行时**（`src/runtime/`，自 fork-spatial-runtime 迁入）：状态生命周期 `Requested → Initialized → Active / Fixed → Marginalized → Archived`，因子批次校验、原子事务、固定延迟窗口。
-- **语义瓦片层**（`src/map/semantic_tile.h` + `semantic_persistence.h`）：在几何瓦片之上挂语义标签（厨房/门/走廊/开放目标），固定容量、无动态分配；语义 SLAM 输出经地理锚定投影到瓦片后挂标签，序列化为文本（v2 格式带 `map_version`，兼容读取 v1）供上游消费与真机对接。
-- **高斯泼溅接口**（`src/render/gaussian_splat.h`）：3D Gaussian Splatting 数据模型 + 标准 3DGS PLY 导出（DC-only，可被 gsplat / SuperSplat 读取）。
-- **瓦片版本链持久化**（`src/map/tile_persistence.h`）：瓦片集合 + `graph_version` 序列化为可恢复文本，幂等重载——元宇宙持久空间地图的索引雏形。
-- **组合演示**（`demo/map_state_demo.cpp`）：Super-LIO 风格位姿 → 地理锚定 → 哈希瓦片 → 状态事务 → 版本化快照。
-- **拉瓦片工具**（`tools/`）：`amap_tile_tool` 输出 GCJ-02 坐标与瓦片 URL；`fetch_amap_tile.sh` 一键拉取底图验证对齐。
-- **splat 导出工具**（`tools/export_splats.cpp`）：瓦片 → 代理高斯泼溅 → 3DGS PLY。
-- **语义地图可视化**（`tools/visualize_semantic_map.py` + `demo/semantic_floor_demo.cpp`）：把语义瓦片按类别着色叠加到高德底图（或离线网格画布），带图例与类别统计。**直接使用瓦片文件里已有的 GCJ-02 索引，不做任何坐标换算** —— 多一次转换就多一次 500m 偏移的机会。`semantic_floor_demo` 一次跑完「楼层布局 → VLM 回写 → 输出可视图」全链路。
-- **语义标注回写**（`src/runtime/semantic_label_overlay.h` + `tools/semantic_label_merge.cpp`）：把老师（VLM）标注的 `room_found` 落回语义瓦片。**base 文件只读不改**，合并结果另存（回滚 = 丢掉产物）；逐条校验 `map_version`，不匹配即丢弃；`map_version` 默认 +1（版本是 trace 样本的连接键，不递增会让「标注前的样本」与「标注后的地图」错误配对）；老师默认置信度 70，合并时取高者，不压掉 SLAM 实测。
-- **语义瓦片查询服务**（`src/runtime/semantic_service.h` + `tools/semantic_tile_service.cpp`）：TCP 行分隔 JSON 的只读查询服务，把语义地图暴露给边侧 / 端侧消费。支持 `info` / `tiles` / `query`（半径 + 类别 + 置信度过滤，按距离升序）。**查询点用 WGS84（机器人位姿空间），服务端内部换算到瓦片的 GCJ-02 空间** —— 混用会产生约 500m 系统性偏移。每次响应必带 `map_version` 供消费方校验。
-- **端侧采集包 ScenePack v1**（`src/io/scenepack.h`）：真机数据落盘与跨机交换容器。控制面 `manifest`（坐标系锚点 + `map_version` + `base_hash`）、索引面 `poses.bin`（40 字节定长关键帧）、`edges.bin`（相对位姿 + sqrtinfo 上三角）、语义瓦片、数据面 chunk 计数；FNV-1a 64 逐文件校验。定长记录、有界缓冲、返回码而非异常。
+- 经纬度与高德 / XYZ / Slippy Map 瓦片 `z/x/y` 互转。
+- 固定容量开放寻址哈希表、幂等登记、重复拒绝和墓碑删除。
+- 局部 ENU 位姿与地图原点经纬度 / 航向的地理锚定。
+- WGS84 ↔ GCJ-02 转换和高德瓦片 URL 构造。
+- 状态生命周期、因子批次校验、原子事务和固定延迟窗口。
+- 语义瓦片、`map_version` 追踪、只读查询服务和 ScenePack v1。
+- Gaussian Splatting 数据模型与 3DGS PLY 导出。
+- 语义地图可视化、标签回写和组合演示。
 
 ## 快速开始
 
@@ -59,206 +48,65 @@ ctest --test-dir build --output-on-failure
 ./build/map_state_demo
 ```
 
-拉一张高德底图瓦片，验证位姿与底图对齐：
+验证底图对齐：
 
 ```bash
 ./tools/fetch_amap_tile.sh 30.2740 120.1550 18 amap_tile.png
-# wgs84=30.274,120.155
-# gcj02=30.27167,120.1597
-# tile=z18/218569/107925
-# saved: amap_tile.png (PNG image data)
 ```
 
-把已登记瓦片导出为高斯泼溅 PLY：
+导出并查看代理 splat：
 
 ```bash
 ./build/export_splats 30.2740 120.1550 18 splats.ply
-# 导出 3 个 splat → splats.ply
-```
-
-拼接 3×3 高德底图，叠加已登记 splat 瓦片可视化：
-
-```bash
 python3 tools/visualize_tiles.py 30.2740 120.1550 18 docs/assets/map_3x3.png
 ```
 
 ## Demo 展示
 
-### ① 高德底图 + splat 瓦片叠加
+### 高德底图与 splat 瓦片叠加
 
-![3×3 高德底图 + splat 瓦片叠加](docs/assets/map_3x3.png)
+![3×3 高德底图与 splat 瓦片叠加](docs/assets/map_3x3.png)
 
-> 蓝框 = 中心瓦片；红框 + 红点 = 已登记 splat 瓦片（对应 Super-LIO 轨迹跨过的 3 个瓦片）。底图为杭州武林广场真实高德瓦片。
+蓝框为中心瓦片；红框和红点为已登记 splat 瓦片。
 
-### ② 终端全链路回放
-
-`./build/map_state_demo` 的实际输出：
+### 终端全链路回放
 
 ```text
 == Super-LIO 增量位姿 → 哈希瓦片 → 空间状态事务 ==
-  [+ok] 局部(0,0) → wgs(30.274,120.155) → z18 x218569 y107925  graph_version=1
-  [+ok] 局部(0,500) → wgs(30.2785,120.155) → z18 x218569 y107921  graph_version=2
-  [+ok] 局部(700,0) → wgs(30.274,120.162) → z18 x218574 y107925  graph_version=3
-  [dup] 局部(0,0) → z18 x218569 y107925 已存在，拒绝重复
-
+[+ok] 局部位姿 → WGS84 → z/x/y → graph_version=1
+[dup] 已存在瓦片，拒绝重复登记
 == 状态快照 ==
-  graph_version=3  active_states=3  backend_operations=9  tiles_registered=3  duplicates_rejected=1
+graph_version=3 active_states=3 tiles_registered=3 duplicates_rejected=1
 ```
 
-### ③ 高斯泼溅 PLY（拖进 SuperSplat 旋转查看）
+### Gaussian Splatting 导出
 
-`splats.ply`（3 个代理 splat）已导出到 [docs/assets/splats.ply](docs/assets/splats.ply)，可拖入 https://superspl.at/editor 交互查看。
-
-```text
-$ ./build/export_splats 30.2740 120.1550 18 splats.ply
-导出 3 个 splat → splats.ply
-```
-
-无 CMake 时可直接编译：
-
-```bash
-clang++ -std=c++20 -I src src/runtime/*.cpp demo/map_state_demo.cpp -o map_state_demo
-clang++ -std=c++20 -I src src/runtime/*.cpp tests/map_state_test.cpp -o map_state_test
-```
-
-演示输出：
-
-```text
-== 哈希瓦片嵌入 + 空间状态事务 ==
-  [+ok] z18 x218566 y107923  瓦片NW=(30.2745,120.155)  graph_version=1
-  [+ok] z18 x218566 y107920  瓦片NW=(30.278,120.155)  graph_version=2
-  [+ok] z18 x218569 y107923  瓦片NW=(30.2745,120.159)  graph_version=3
-  [dup] z18 x218566 y107923 已存在，拒绝重复登记
-
-== 状态快照 ==
-  graph_version=3  active_states=3  backend_operations=9  tiles_registered=3  duplicates_rejected=1
-```
+`splats.ply` 位于 [docs/assets/splats.ply](docs/assets/splats.ply)，可拖入 [SuperSplat](https://superspl.at/editor) 交互查看。
 
 ## 目录结构
 
 ```text
-src/map/        哈希瓦片编码 / 存储 / 高德底图对齐（header-only）
-src/io/         端侧采集包 ScenePack（manifest + 位姿图 + 校验）
-src/runtime/    空间状态运行时（fork-spatial 核心）+ 语义瓦片查询服务
-demo/           组合演示
-tools/          高德瓦片工具（坐标转换 + 拉取）
-tests/          无框架单元测试（C++ 直编 + Python 纯逻辑）
-docs/           架构说明与路线图
+src/map/        瓦片编码、存储、底图、语义瓦片和持久化
+src/runtime/    状态事务、语义标签和查询服务
+src/render/     Gaussian Splatting 数据模型
+demo/           地图状态与语义楼层演示
+tools/          拉瓦片、导出、合并和可视化工具
+docs/assets/    演示资产
 ```
 
-## 语义地图链路（对接真机）
+## 坐标与版本边界
 
-```text
-语义 SLAM 输出（局部位姿 + 类别 + 置信度）
-  → 地理锚定 → 语义瓦片（SemanticTile：瓦片 + 标签集合）
-  → 序列化（semantic-tile 2 <zoom> <map_version>）→ 供上游（边侧世界模型 / 端侧策略）消费
-  → 可选：与位姿图一起打进 ScenePack，跨机交换
-```
+- 机器人位姿查询使用 WGS84；服务端内部换算到瓦片的 GCJ-02 空间，不能混用。
+- 语义瓦片和查询响应携带 `map_version`，消费方必须校验版本。
+- `base` 地图文件只读不改，标签合并结果另存；版本不匹配的标注会被丢弃。
+- 地图底座不替代 SLAM、规划器或厂商地图服务，生产部署仍需真实数据和系统辨识。
 
-运行语义 demo：
+## 关联项目
 
-```bash
-./build/semantic_map_demo
-```
+- [ForkSpatial-Runtime-Engine](https://github.com/zxinyu-robot/ForkSpatial-Runtime-Engine)：空间状态运行时。
+- [quadruped-crossfloor-nav-ws](https://github.com/zxinyu-robot/quadruped-crossfloor-nav-ws)：Go2 跨楼层导航案例。
+- [swarm-adapter-foundation](https://github.com/zxinyu-robot/swarm-adapter-foundation)：多机状态和通信策略基础设施。
 
-### 语义瓦片查询服务
-
-把语义地图暴露给边侧（Python）消费 —— 这是「老师 VLM 理解 → 语义瓦片 → 端侧策略」链路的通道。
-
-```bash
-./build/semantic_tile_service --file /tmp/semantic_tiles.txt --port 9881 \
-  --anchor-lat 30.2741 --anchor-lon 120.1551
-```
-
-```bash
-# info：版本 / 缩放级 / 瓦片数 / 锚点
-printf '{"cmd":"info"}\n' | nc 127.0.0.1 9881
-
-# 半径查询（lat/lon 为 WGS84；可加 categories / min_confidence）
-printf '{"cmd":"query","lat":30.2741,"lon":120.1551,"radius_m":300,"categories":["kitchen"]}\n' \
-  | nc 127.0.0.1 9881
-# → {"ok":true,"map_version":7,"count":1,"truncated":false,
-#    "tiles":[{"z":18,"x":218569,"y":107925,"dist_m":37.68,
-#              "tags":[{"cat":"kitchen","conf":90}]}]}
-```
-
-**坐标系铁律**：瓦片索引空间是 GCJ-02（高德），机器人位姿是 WGS84。查询点必须给 WGS84，服务端负责换算。混用会让同一瓦片的距离从 38m 变成 513m，症状是「语义瓦片莫名查不到」而非报错 —— 测试已显式锁住这个坑。
-
-### 语义标注回写（VLM → 地图）
-
-老师（VLM）看懂了房间，把结论写回地图 —— 这是「老师能力传导到端侧学生」的最后一步。
-
-```bash
-# 1) 边侧产出 overlay（edge-semantic-gateway 的 edge/semantic_writer.py）
-#    每行：{"map_version":7,"lat":..,"lon":..,"category":"kitchen","confidence":85}
-
-# 2) 合并进语义瓦片（C++ 做，因为落瓦片要过 GCJ-02 换算，不能有两份实现）
-./build/semantic_label_merge --base semantic_tiles.txt \
-  --overlay labels.jsonl --out semantic_tiles_v8.txt --expected-version 7
-# base=2 个瓦片 (version=7, zoom=18)
-# overlay=3 行，应用 3 条
-# 输出 4 个瓦片 → semantic_tiles_v8.txt (version=8，已递增)
-```
-
-**四条约束**：
-
-| 约束 | 为什么 |
-| --- | --- |
-| base 只读，结果另存 | 回滚 = 丢掉产物，不靠撤销操作 |
-| 逐条校验 `map_version` | 旧图标注贴到新图 = 「厨房」标在走廊上 |
-| `map_version` 默认 +1 | 版本是 trace 连接键，不递增会让新旧样本错误配对 |
-| 老师默认置信度 70 | 低于 SLAM 实测，合并不压掉传感器结果 |
-
-### 语义地图可视化
-
-一张图看清「标在哪、标成什么」——这是语义地图「供上游消费」的可见证据。
-
-![语义楼层地图](docs/assets/semantic_floor_map.png)
-
-```bash
-# 一步跑完：楼层布局 → 模拟 VLM 回写 → 输出两份瓦片文件
-./build/semantic_floor_demo /tmp
-
-# 出图（有底图）
-python3 tools/visualize_semantic_map.py /tmp/semantic_floor_v2.txt out.png
-# 或离线渲染（z≥19 时高德只有建筑底纹，网格更清晰）
-python3 tools/visualize_semantic_map.py /tmp/semantic_floor_v2.txt out.png --no-basemap
-```
-
-上图中右侧延伸出的两格（`corridor 76`、`bathroom 72`）就是 VLM 回写的结果，
-`map_version` 因此从 1 递增到 2。
-
-**瓦片粒度必须匹配语义对象尺度**：demo 用 z20（约 34m/瓦片）而非 z18（约 150m/瓦片）。
-用 z18 会把整栋楼标成一个「厨房」，物理上不成立。
-
-### ScenePack：真机数据打包与校验
-
-真机位姿直接写成文本（每行一个关键帧），工具转成定长二进制包：
-
-```text
-# poses.txt —— Super-LIO / 里程计直接吐即可
-<id> <stamp_ns> <x> <y> <z> <qx> <qy> <qz> <qw>
-```
-
-```bash
-# 打包（edges.txt / semantic_tiles.txt 可选）
-./build/scenepack_tool pack out/ 30.2741 120.1551 0.785398 7 poses.txt edges.txt semantic_tiles.txt
-
-# 校验：先比对 FNV-1a 校验和，再比对 map_version
-./build/scenepack_tool verify out/ 7
-# → verify out/: ok
-```
-
-校验失败返回非零并给出具体原因（`checksum_mismatch` / `version_mismatch` / `bad_magic` / `capacity_exceeded`），不静默通过。
-
-## 规划中
-
-- 真实点云 / 关键帧 → splat 生成（当前为每瓦片代理 splat，接真实渲染引擎时替换）。
-- 瓦片版本链的增量同步与共享（当前为单机文本持久化，跨机共享待接 DDS / 对象存储）。
-- 语义标签与 edge-semantic-gateway 的 frontier 语义对齐（师生蒸馏链路的第一版）：**标注回写已通，尚缺 VLM 输出自动触发回写**。
-- ScenePack 增量同步与内容寻址续传（当前为单机整包）。
-- 高斯分块序列化（量化列存 + 空间分块）；当前 `export_splats` 仍是每瓦片代理 splat，无真实高斯场可序列化。
-
-## License
+## 许可证
 
 [MIT](LICENSE)
